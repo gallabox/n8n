@@ -120,7 +120,7 @@ export const showMessage = mixins(externalHooks).extend({
 					${this.collapsableDetails(error)}`,
 				type: 'error',
 				duration: 0,
-			});
+			}, false);
 
 			this.$externalHooks().run('showMessage.showError', {
 				title,
