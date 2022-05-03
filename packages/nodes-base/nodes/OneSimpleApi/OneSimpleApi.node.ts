@@ -23,7 +23,6 @@ export class OneSimpleApi implements INodeType {
 		description: 'A toolbox of no-code utilities',
 		defaults: {
 			name: 'One Simple API',
-			color: '#1A82e2',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -44,6 +43,10 @@ export class OneSimpleApi implements INodeType {
 						value: 'information',
 					},
 					{
+						name: 'Social Profile',
+						value: 'socialProfile',
+					},
+					{
 						name: 'Utility',
 						value: 'utility',
 					},
@@ -55,7 +58,7 @@ export class OneSimpleApi implements INodeType {
 				default: 'website',
 				required: true,
 			},
-			// Generation
+			// website
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -86,6 +89,32 @@ export class OneSimpleApi implements INodeType {
 				],
 				default: 'pdf',
 			},
+			// socialProfile
+			{
+				displayName: 'Operation',
+				name: 'operation',
+				type: 'options',
+				displayOptions: {
+					show: {
+						resource: [
+							'socialProfile',
+						],
+					},
+				},
+				options: [
+					{
+						name: 'Instagram',
+						value: 'instagramProfile',
+						description: 'Get details about an Instagram profile',
+					},
+					{
+						name: 'Spotify',
+						value: 'spotifyArtistProfile',
+						description: 'Get details about a Spotify Artist',
+					},
+				],
+				default: 'instagramProfile',
+			},
 			// Information
 			{
 				displayName: 'Operation',
@@ -113,7 +142,7 @@ export class OneSimpleApi implements INodeType {
 				default: 'exchangeRate',
 				description: 'The operation to perform.',
 			},
-			// Utiliy
+			// Utility
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -271,15 +300,13 @@ export class OneSimpleApi implements INodeType {
 							},
 						],
 						default: '',
-						description: 'The page size',
 					},
 					{
 						displayName: 'Force Refresh',
 						name: 'force',
 						type: 'boolean',
 						default: false,
-						description: `Normally the API will reuse a previously taken screenshot of the URL to give a faster response.
-						This option allows you to retake the screenshot at that exact time, for those times when it's necessary`,
+						description: 'Normally the API will reuse a previously taken screenshot of the URL to give a faster response. This option allows you to retake the screenshot at that exact time, for those times when it\'s necessary',
 					},
 				],
 			},
@@ -500,24 +527,60 @@ export class OneSimpleApi implements INodeType {
 							},
 						],
 						default: '',
-						description: 'The screen size',
 					},
 					{
 						displayName: 'Force Refresh',
 						name: 'force',
 						type: 'boolean',
 						default: false,
-						description: `Normally the API will reuse a previously taken screenshot of the URL to give a faster response.
-						This option allows you to retake the screenshot at that exact time, for those times when it's necessary`,
+						description: 'Normally the API will reuse a previously taken screenshot of the URL to give a faster response. This option allows you to retake the screenshot at that exact time, for those times when it\'s necessary',
 					},
 					{
 						displayName: 'Full Page',
 						name: 'fullpage',
 						type: 'boolean',
 						default: false,
-						description: 'The API takes a screenshot of the viewable area for the desired screen size. If you need a screenshot of the whole length of the page, use this option',
+						description: 'The API takes a screenshot of the viewable area for the desired screen size. If you need a screenshot of the whole length of the page, use this option.',
 					},
 				],
+			},
+			// socialProfile: instagramProfile
+			{
+				displayName: 'Profile Name',
+				name: 'profileName',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'instagramProfile',
+						],
+						resource: [
+							'socialProfile',
+						],
+					},
+				},
+				default: '',
+				description: 'Profile name to get details of',
+			},
+			// socialProfile: spotifyArtistProfile
+			{
+				displayName: 'Artist Name',
+				name: 'artistName',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: [
+							'spotifyArtistProfile',
+						],
+						resource: [
+							'socialProfile',
+						],
+					},
+				},
+				default: '',
+				description: 'Artist name to get details for',
 			},
 			// information: exchangeRate
 			{
@@ -555,7 +618,6 @@ export class OneSimpleApi implements INodeType {
 					},
 				},
 				default: '',
-				description: 'From Currency',
 			},
 			{
 				displayName: 'To Currency',
@@ -574,7 +636,6 @@ export class OneSimpleApi implements INodeType {
 					},
 				},
 				default: '',
-				description: 'To Currency',
 			},
 			// information: imageMetadata
 			{
@@ -636,7 +697,6 @@ export class OneSimpleApi implements INodeType {
 						name: 'headers',
 						type: 'boolean',
 						default: false,
-						description: '',
 					},
 				],
 			},
@@ -657,7 +717,6 @@ export class OneSimpleApi implements INodeType {
 					},
 				},
 				default: '',
-				description: 'Email Address',
 			},
 			// utility: expandURL
 			{
@@ -684,7 +743,7 @@ export class OneSimpleApi implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: IDataObject[] = [];
-		const length = items.length as unknown as number;
+		const length = items.length;
 		const qs: IDataObject = {};
 		let responseData;
 		let download;
@@ -778,6 +837,20 @@ export class OneSimpleApi implements INodeType {
 					}
 				}
 
+				if (resource === 'socialProfile') {
+					if (operation === 'instagramProfile') {
+						const profileName = this.getNodeParameter('profileName', i) as string;
+						qs.profile = profileName;
+						responseData = await oneSimpleApiRequest.call(this, 'GET', '/instagram_profile', {}, qs);
+					}
+
+					if (operation === 'spotifyArtistProfile') {
+						const artistName = this.getNodeParameter('artistName', i) as string;
+						qs.profile = artistName;
+						responseData = await oneSimpleApiRequest.call(this, 'GET', '/spotify_profile', {}, qs);
+					}
+				}
+
 				if (resource === 'information') {
 					if (operation === 'exchangeRate') {
 						const value = this.getNodeParameter('value', i) as string;
@@ -865,3 +938,4 @@ export class OneSimpleApi implements INodeType {
 		return [this.helpers.returnJsonArray(returnData)];
 	}
 }
+

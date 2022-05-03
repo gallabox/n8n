@@ -13,17 +13,19 @@ import {
 	ICredentialTestFunctions,
 	IDataObject,
 	ILoadOptionsFunctions,
+	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
-	NodeCredentialTestResult,
+	JsonObject,
 	NodeOperationError,
 } from 'n8n-workflow';
 
 import {
 	jiraSoftwareCloudApiRequest,
 	jiraSoftwareCloudApiRequestAllItems,
+	simplifyIssueOutput,
 	validateJSON,
 } from './GenericFunctions';
 
@@ -66,7 +68,6 @@ export class Jira implements INodeType {
 		description: 'Consume Jira Software API',
 		defaults: {
 			name: 'Jira',
-			color: '#4185f7',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
@@ -155,7 +156,7 @@ export class Jira implements INodeType {
 
 	methods = {
 		credentialTest: {
-			async jiraSoftwareApiTest(this: ICredentialTestFunctions, credential: ICredentialsDecrypted): Promise<NodeCredentialTestResult> {
+			async jiraSoftwareApiTest(this: ICredentialTestFunctions, credential: ICredentialsDecrypted): Promise<INodeCredentialTestResult> {
 				const credentials = credential.data;
 				const data = Buffer.from(`${credentials!.email}:${credentials!.password || credentials!.apiToken}`).toString('base64');
 
@@ -179,7 +180,7 @@ export class Jira implements INodeType {
 				} catch (err) {
 					return {
 						status: 'Error',
-						message: `Connection details not valid: ${err.message}`,
+						message: `Connection details not valid: ${(err as JsonObject).message}`,
 					};
 				}
 				return {
@@ -304,45 +305,29 @@ export class Jira implements INodeType {
 			// Get all the users to display them to user so that he can
 			// select them easily
 			async getUsers(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const returnData: INodePropertyOptions[] = [];
 				const jiraVersion = this.getCurrentNodeParameter('jiraVersion') as string;
+				const query: IDataObject = {};
+				let endpoint = '/api/2/users/search';
+
 				if (jiraVersion === 'server') {
-					// the interface call must bring username
-					const users = await jiraSoftwareCloudApiRequest.call(this, '/api/2/user/search', 'GET', {},
-						{
-							username: '\'',
-						},
-					);
-					for (const user of users) {
-						const userName = user.displayName;
-						const userId = user.name;
-
-						returnData.push({
-							name: userName,
-							value: userId,
-						});
-					}
-				} else {
-					const users = await jiraSoftwareCloudApiRequest.call(this, '/api/2/users/search', 'GET');
-
-					for (const user of users) {
-						const userName = user.displayName;
-						const userId = user.accountId;
-
-						returnData.push({
-							name: userName,
-							value: userId,
-						});
-					}
+					endpoint = '/api/2/user/search';
+					query.username = '\'';
 				}
 
-				returnData.sort((a, b) => {
-					if (a.name < b.name) { return -1; }
-					if (a.name > b.name) { return 1; }
-					return 0;
+				const users = await jiraSoftwareCloudApiRequest.call(this, endpoint, 'GET', {}, query);
+
+				return users.reduce((activeUsers: INodePropertyOptions[], user: IDataObject) => {
+					if (user.active) {
+						activeUsers.push({
+							name: user.displayName as string,
+							value: (user.accountId || user.name) as string,
+						});
+					}
+					return activeUsers;
+				}, []).sort((a: INodePropertyOptions, b: INodePropertyOptions) => {
+					return a.name.toLowerCase() > b.name.toLowerCase() ? 1 : -1;
 				});
 
-				return returnData;
 			},
 
 			// Get all the groups to display them to user so that he can
@@ -419,10 +404,10 @@ export class Jira implements INodeType {
 				for (const key of Object.keys(fields)) {
 					const field = fields[key];
 					if (field.schema && Object.keys(field.schema).includes('customId')) {
-							returnData.push({
-								name: field.name,
-								value: field.key || field.fieldId,
-							});
+						returnData.push({
+							name: field.name,
+							value: field.key || field.fieldId,
+						});
 					}
 				}
 				return returnData;
@@ -457,7 +442,7 @@ export class Jira implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: IDataObject[] = [];
-		const length = items.length as unknown as number;
+		const length = items.length;
 		let responseData;
 		const qs: IDataObject = {};
 
@@ -506,9 +491,15 @@ export class Jira implements INodeType {
 						}
 					}
 					if (additionalFields.reporter) {
-						fields.reporter = {
-							id: additionalFields.reporter as string,
-						};
+						if (jiraVersion === 'server') {
+							fields.reporter = {
+								name: additionalFields.reporter as string,
+							};
+						} else {
+							fields.reporter = {
+								id: additionalFields.reporter as string,
+							};
+						}
 					}
 					if (additionalFields.description) {
 						fields.description = additionalFields.description as string;
@@ -586,9 +577,15 @@ export class Jira implements INodeType {
 						}
 					}
 					if (updateFields.reporter) {
-						fields.reporter = {
-							id: updateFields.reporter as string,
-						};
+						if (jiraVersion === 'server') {
+							fields.reporter = {
+								name: updateFields.reporter as string,
+							};
+						} else {
+							fields.reporter = {
+								id: updateFields.reporter as string,
+							};
+						}
 					}
 					if (updateFields.description) {
 						fields.description = updateFields.description as string;
@@ -631,6 +628,7 @@ export class Jira implements INodeType {
 			if (operation === 'get') {
 				for (let i = 0; i < length; i++) {
 					const issueKey = this.getNodeParameter('issueKey', i) as string;
+					const simplifyOutput = this.getNodeParameter('simplifyOutput', i) as boolean;
 					const additionalFields = this.getNodeParameter('additionalFields', i) as IDataObject;
 					if (additionalFields.fields) {
 						qs.fields = additionalFields.fields as string;
@@ -641,6 +639,9 @@ export class Jira implements INodeType {
 					if (additionalFields.expand) {
 						qs.expand = additionalFields.expand as string;
 					}
+					if (simplifyOutput) {
+						qs.expand = `${qs.expand || ''},names`;
+					}
 					if (additionalFields.properties) {
 						qs.properties = additionalFields.properties as string;
 					}
@@ -648,7 +649,12 @@ export class Jira implements INodeType {
 						qs.updateHistory = additionalFields.updateHistory as string;
 					}
 					responseData = await jiraSoftwareCloudApiRequest.call(this, `/api/2/issue/${issueKey}`, 'GET', {}, qs);
-					returnData.push(responseData);
+
+					if (simplifyOutput) {
+						returnData.push(simplifyIssueOutput(responseData));
+					} else {
+						returnData.push(responseData);
+					}
 				}
 			}
 			//https://developer.atlassian.com/cloud/jira/platform/rest/v2/#api-rest-api-2-search-post
@@ -678,7 +684,7 @@ export class Jira implements INodeType {
 						responseData = await jiraSoftwareCloudApiRequest.call(this, `/api/2/search`, 'POST', body);
 						responseData = responseData.issues;
 					}
-					returnData.push.apply(returnData, responseData);
+					returnData.push(...responseData);
 				}
 			}
 			//https://developer.atlassian.com/cloud/jira/platform/rest/v2/#api-rest-api-2-issue-issueIdOrKey-changelog-get

@@ -33,7 +33,10 @@ export const cameraProxyFields: INodeProperties[] = [
 	{
 		displayName: 'Camera Entity ID',
 		name: 'cameraEntityId',
-		type: 'string',
+		type: 'options',
+		typeOptions: {
+			loadOptionsMethod: 'getCameraEntities',
+		},
 		default: '',
 		required: true,
 		displayOptions: {
@@ -46,7 +49,6 @@ export const cameraProxyFields: INodeProperties[] = [
 				],
 			},
 		},
-		description: 'The camera entity ID.',
 	},
 	{
 		displayName: 'Binary Property',

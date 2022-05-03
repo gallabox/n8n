@@ -33,14 +33,13 @@ export class PagerDutyOAuth2Api implements ICredentialType {
 			displayName: 'Scope',
 			name: 'scope',
 			type: 'hidden',
-			default: '',
+			default: 'write',
 		},
 		{
 			displayName: 'Authentication',
 			name: 'authentication',
 			type: 'hidden',
 			default: 'header',
-			description: 'Method of authentication.',
 		},
 	];
 }
